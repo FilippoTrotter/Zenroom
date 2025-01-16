@@ -84,7 +84,7 @@ local function import_supported_selective_disclosure(obj)
     for _,v in pairs(creds) do
         check_display(v.display)
         check_support(v, 'format', 'vc+sd-jwt')
-        check_support(v, 'credential_signing_alg_values_supported', {'ES256'})
+        check_support(v, 'credential_signing_alg_values_supported', {'ES256', 'MLDSA44'})
         check_support(v, 'cryptographic_binding_methods_supported', {"jwk", "did:dyne:sandbox.signroom"})
         -- check_support(creds[i], 'proof_types_supported', {jwt = { proof_signing_alg_values_supported = {"ES256"}}})
         if (not v.vct) then
@@ -335,7 +335,15 @@ ZEN:add_schema(
         signed_selective_disclosure = {
             import = import_signed_selective_disclosure,
             export = export_signed_selective_disclosure,
-        }
+        },
+        pq_signed_selective_disclosure = {
+            import = import_signed_selective_disclosure,
+            export = export_signed_selective_disclosure,
+        },
+        pq_decoded_selective_disclosure = {
+            import = import_decoded_selective_disclosure,
+            export = export_decoded_selective_disclosure,
+        },
     }
 )
 
@@ -391,7 +399,25 @@ When("create signed selective disclosure of ''", function(sdp_name)
     new_codec('signed_selective_disclosure')
 end)
 
+When("create signed pq selective disclosure of ''", function(sdp_name)
+    local sk = havekey'mldsa44'
+    local sdp = have(sdp_name)
+
+    ACK.pq_signed_selective_disclosure = {
+        jwt=SD_JWT.create_jwt_pq(sdp.payload, sk),
+        disclosures=sdp.disclosures,
+    }
+    new_codec('pq_signed_selective_disclosure')
+end)
+
 When("use signed selective disclosure '' only with disclosures ''", function(ssd_name, lis)
+    local ssd = have(ssd_name)
+    local disclosed_keys = have(lis)
+    local disclosure = SD_JWT.retrive_disclosures(ssd, disclosed_keys)
+    ssd.disclosures = disclosure
+end)
+
+When("use pq signed selective disclosure '' only with disclosures ''", function(ssd_name, lis)
     local ssd = have(ssd_name)
     local disclosed_keys = have(lis)
     local disclosure = SD_JWT.retrive_disclosures(ssd, disclosed_keys)
@@ -460,7 +486,47 @@ IfWhen("verify signed selective disclosure '' issued by '' is valid", function(o
     end
 
 end)
+IfWhen("verify pq signed selective disclosure '' issued by '' is valid", function(obj, by)
+    local signed_sd = have(obj)
+    local iss_pk = load_pubkey_compat(by, 'mldsa44')
+    local jwt = signed_sd.jwt
+    local disclosures = signed_sd.disclosures
+-- Ensure that a signing algorithm was used that was deemed secure for the application.
+-- TODO: may break due to non-alphabetic sorting of header elements
+    zencode_assert(SD_JWT.verify_jws_pq_header(jwt), "The JWT header is not valid")
 
+-- Check that the _sd_alg claim value is understood and the hash algorithm is deemed secure.
+    zencode_assert(SD_JWT.verify_sd_alg(jwt), "The hash algorithm is not supported")
+
+-- Check that the sd-jwt contains all the mandatory claims
+-- TODO: break due to non-alphabetic sorting of string dictionary
+-- elements when re-encoded to JSON. The payload may be a nested
+-- dictionary at 3 or more depth.
+    zencode_assert(SD_JWT.check_mandatory_claim_names(jwt.payload), "The JWT payload does not contain the mandatory claims")
+
+-- Process the Disclosures and embedded digests in the Issuersigned JWT and compare the value with the digests calculated
+-- Disclosures are an array and sorting is kept so this validation passes.
+    zencode_assert(SD_JWT.verify_sd_fields(jwt.payload, disclosures), "The disclosure is not valid")
+
+-- Validate the signature over the Issuer-signed JWT.
+-- TODO: break due to non-alphabetic sorting of objects mentioned above in this function
+    zencode_assert(SD_JWT.verify_jws_pq_signature(jwt, iss_pk), "The issuer signature is not valid")
+
+-- TODO?: Validate the Issuer and that the signing key belongs to this Issuer.
+
+    zencode_assert(os, 'Could not find os to check timestamps')
+    local time_now = TIME.new(os.time())
+    if(jwt.payload.iat) then
+        zencode_assert(jwt.payload.iat < time_now, 'The iat claim is not valid')
+    end
+    if(jwt.payload.exp) then
+        zencode_assert(jwt.payload.exp > time_now, 'The exp claim is not valid')
+    end
+    if(jwt.payload.nbf) then
+        zencode_assert(jwt.payload.nbf < time_now, 'The nbf claim is not valid')
+    end
+
+end)
 When("create disclosed kv from signed selective disclosure ''", function(ssd_name)
     local ssd, ssd_c = have(ssd_name)
     zencode_assert(ssd_c.schema and ssd_c.schema == "signed_selective_disclosure",
