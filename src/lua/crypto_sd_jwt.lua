@@ -20,6 +20,7 @@
 --]]
 
 local ES256 = require'es256'
+local PQ = require'qp'
 local sd_jwt = {}
 
 local function export_str_dict(obj)
@@ -158,6 +159,24 @@ function sd_jwt.create_jwt_es256(payload, sk)
     }
 end
 
+function sd_jwt.create_jwt_pq(payload, sk)
+    local header, b64header, b64payload, hmac
+    header = {
+        alg=O.from_string("MLDSA44"),
+        typ=O.from_string("vc+sd-jwt")
+    }
+    local payload_str = export_str_dict(payload)
+    b64payload = O.from_string(JSON.raw_encode(payload_str, true)):url64()
+    local header_str = export_str_dict(header)
+    b64header = O.from_string(JSON.raw_encode(header_str, true)):url64()
+
+    local signature = PQ. mldsa44_signature(sk, O.from_string(b64header .. "." .. b64payload))
+    return {
+        header=header,
+        payload=payload,
+        signature=signature,
+    }
+end
 -- Given as input a signed selective disclosure 'ssd' and a list of strings 'disclosed_keys'
 -- Return the list of disclosure array with keys in 'disclosed_keys'
 function sd_jwt.retrive_disclosures(ssd, disclosed_keys)
@@ -184,10 +203,20 @@ function sd_jwt.verify_jws_signature(jws, pk)
     return ES256.verify(pk, O.from_string(b64header .. "." .. b64payload), jws.signature)
 end
 
+function sd_jwt.verify_jws_pq_signature(jws, pk)
+    local payload_str = export_str_dict(jws.payload)
+    local b64payload = O.from_string(JSON.raw_encode(payload_str, true)):url64()
+    local header_str = export_str_dict(jws.header)
+    local b64header = O.from_string(JSON.raw_encode(header_str, true)):url64()
+    return PQ.mldsa44_verify(pk, jws.signature, O.from_string(b64header .. "." .. b64payload))
+end
+
 function sd_jwt.verify_jws_header(jws)
     return jws.header.alg == O.from_string("ES256") --and jws.header.typ == O.from_string("JWT")
 end
-
+function sd_jwt.verify_jws_pq_header(jws)
+    return jws.header.alg == O.from_string("MLDSA44")
+end
 function sd_jwt.verify_sd_alg(jwt)
     return jwt.payload._sd_alg == O.from_string("sha-256")
 end
