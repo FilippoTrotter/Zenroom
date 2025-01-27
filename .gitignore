@@ -24,7 +24,8 @@ src/zen_ecp_factory.h
 # generated test files
 test/**/*.json
 test/**/*.zen
-
+!test/SDPQ/**/*.json
+!test/SDPQ/**/*.zen
 # build targets in zenroom
 *.[oa]
 *.so
