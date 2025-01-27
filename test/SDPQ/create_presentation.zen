@@ -1,0 +1,7 @@
+Scenario 'sd_jwt': create Presentation 
+Given I have a 'pq signed selective disclosure' named 'PQ_sd-jwt'
+Given I have a 'string array' named 'disclosure_session'
+
+When I use pq signed selective disclosure 'PQ_sd-jwt' only with disclosures 'disclosure_session'
+When I rename 'PQ_sd-jwt' to 'sd-jwt presentation'
+Then print 'sd-jwt presentation'

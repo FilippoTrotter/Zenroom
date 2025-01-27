@@ -1,0 +1,16 @@
+
+Scenario 'sd_jwt' : construct the SD Payload  
+Scenario 'qp' : sign the SD Payoad
+
+Given I am known as 'The Issuer'
+Given I have my 'keyring'
+Given I have my 'mldsa44 public key'
+
+# Here we load the credential request, signed by the Authorization server
+Given I have a 'selective_disclosure_request'
+
+When I create selective disclosure of 'selective_disclosure_request'
+When I create the signed pq selective disclosure of 'selective disclosure'
+When I rename the 'pq signed selective disclosure' to 'PQ sd-jwt'
+
+Then print 'PQ sd-jwt'

@@ -1,0 +1,15 @@
+
+Scenario 'qp' : verify SD-JWT signature
+Scenario 'sd_jwt' : verify HMACs and disclosures 
+
+# Here we load the Issuer's pubkey, which may be retrieved from a DID document
+Given I have a 'mldsa44 public key' from 'The Issuer'
+
+# Here we load the Presentation in SD-JWT format
+Given I have a 'pq signed selective disclosure' named 'sd-jwt presentation'
+
+When I verify pq signed selective disclosure 'sd-jwt presentation' issued by 'The Issuer' is valid
+
+# If the verification is successful, a cheerful string is printed. Else, prepare for a BSOD. 
+Then print the string 'Verification of Presentation was successful!'
+
